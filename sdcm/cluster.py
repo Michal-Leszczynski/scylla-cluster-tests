@@ -1791,6 +1791,11 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
         return result.exit_status == 1
 
     def install_manager_agent(self, package_path: Optional[str] = None) -> None:
+        create_log_dir_commands = dedent("""
+            mkdir -p /home/scyllaadm/logs
+            chmod 777 /home/scyllaadm/logs
+        """)
+        self.remoter.sudo(f'bash -cxe "{create_log_dir_commands}"')
         package_name = "scylla-manager-agent"
         if package_path:
             package_name = f"{package_path}scylla-manager-agent*"
