@@ -1791,11 +1791,12 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
         return result.exit_status == 1
 
     def install_manager_agent(self, package_path: Optional[str] = None) -> None:
-        create_log_dir_commands = dedent("""
-            mkdir -p /home/scyllaadm/logs
-            chmod 777 /home/scyllaadm/logs
-        """)
-        self.remoter.sudo(f'bash -cxe "{create_log_dir_commands}"')
+        try:
+            self.remoter.sudo('mkdir -p /home/ubuntu/logs', verbose=True)
+            self.remoter.sudo('chmod 777 /home/ubuntu/logs', verbose=True)
+        except Exception:  # pylint: disable=broad-except
+            LOGGER.error("Encountered an unhandled exception:",
+                         exc_info=True)
         package_name = "scylla-manager-agent"
         if package_path:
             package_name = f"{package_path}scylla-manager-agent*"
