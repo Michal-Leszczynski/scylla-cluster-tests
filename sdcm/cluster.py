@@ -1791,12 +1791,6 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
         return result.exit_status == 1
 
     def install_manager_agent(self, package_path: Optional[str] = None) -> None:
-        try:
-            self.remoter.sudo('mkdir -p /home/ubuntu/logs', verbose=True)
-            self.remoter.sudo('chmod 777 /home/ubuntu/logs', verbose=True)
-        except Exception:  # pylint: disable=broad-except
-            LOGGER.error("Encountered an unhandled exception:",
-                         exc_info=True)
         package_name = "scylla-manager-agent"
         if package_path:
             package_name = f"{package_path}scylla-manager-agent*"
@@ -1819,7 +1813,6 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
             manager_agent_yaml["tls_cert_file"] = tls_cert_file
             manager_agent_yaml["tls_key_file"] = tls_key_file
             manager_agent_yaml["prometheus"] = f":{self.parent_cluster.params.get('manager_prometheus_port')}"
-            manager_agent_yaml["debug"] = "127.0.0.1:5112"
             manager_agent_yaml["logger"] = {"level": "debug", "sampling": None}
 
         self.remoter.sudo(shell_script_cmd("""\

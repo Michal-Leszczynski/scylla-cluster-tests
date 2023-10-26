@@ -820,8 +820,6 @@ class ScyllaLogCollector(LogCollector):
                                command=f'cat {SCYLLA_MANAGER_AGENT_YAML_PATH}'),
                     CommandLog(name='setup_scripts_errors.log',
                                command='for i in /var/tmp/scylla/*.log;do echo [$i]; cat $i;done'),
-                    DirLog(name="/home/scyllaadm/logs/*",
-                           search_locally=True)
                     ]
     cluster_log_type = "db-cluster"
     cluster_dir_prefix = "db-cluster"
