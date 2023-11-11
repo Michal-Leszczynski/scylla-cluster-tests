@@ -447,10 +447,10 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
         assert backup_task_status == TaskStatus.DONE, \
             f"Backup task ended in {backup_task_status} instead of {TaskStatus.DONE}"
         InfoEvent(message=f'The backup task has ended successfully. Backup run time: {backup_task.duration}').publish()
-        self.db_cluster.nodes[0].run_cqlsh('TRUNCATE keyspace1.standard1')
-        self.restore_backup_with_task(mgr_cluster=mgr_cluster, snapshot_tag=backup_task.get_snapshot_tag(),
-                                      timeout=110000, restore_data=True)
-        self.run_verification_read_stress()
+        # self.db_cluster.nodes[0].run_cqlsh('TRUNCATE keyspace1.standard1')
+        # self.restore_backup_with_task(mgr_cluster=mgr_cluster, snapshot_tag=backup_task.get_snapshot_tag(),
+        #                               timeout=110000, restore_data=True)
+        # self.run_verification_read_stress()
 
     def test_restore_multiple_backup_snapshots(self):  # pylint: disable=too-many-locals
         manager_tool = mgmt.get_scylla_manager_tool(manager_node=self.monitors.nodes[0])

@@ -1813,7 +1813,8 @@ class BaseNode(AutoSshContainerMixin, WebDriverContainerMixin):  # pylint: disab
             manager_agent_yaml["tls_cert_file"] = tls_cert_file
             manager_agent_yaml["tls_key_file"] = tls_key_file
             manager_agent_yaml["prometheus"] = f":{self.parent_cluster.params.get('manager_prometheus_port')}"
-            manager_agent_yaml["logger"] = {"level": "debug", "sampling": None}
+            manager_agent_yaml["debug"] = "127.0.0.1:5112"
+            manager_agent_yaml["rclone"] = {"use_mmap": False}
 
         self.remoter.sudo(shell_script_cmd("""\
             systemctl restart scylla-manager-agent
