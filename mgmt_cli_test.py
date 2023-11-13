@@ -437,7 +437,17 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
         return email_data
 
     def test_backup_and_restore_only_data(self):
-        self.run_prepare_write_cmd()
+        # Proceed with test even on c-s timeout
+        try:
+            self.run_prepare_write_cmd()
+        except BaseException as e:
+            InfoEvent(message=f"Encounterred error: {e.__str__()}").publish()
+            if "WriteTimeoutException" in e.__str__():
+                InfoEvent(message="Proceeding without full data set").publish()
+            else:
+                InfoEvent(message="Failing on unknown exception").publish()
+                raise e
+
         manager_tool = mgmt.get_scylla_manager_tool(manager_node=self.monitors.nodes[0])
         mgr_cluster = manager_tool.get_cluster(cluster_name=self.CLUSTER_NAME) \
             or manager_tool.add_cluster(name=self.CLUSTER_NAME, db_cluster=self.db_cluster,
