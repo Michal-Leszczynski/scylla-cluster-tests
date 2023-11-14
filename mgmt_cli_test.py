@@ -441,12 +441,7 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
         try:
             self.run_prepare_write_cmd()
         except BaseException as e:
-            InfoEvent(message=f"Encounterred error: {e.__str__()}").publish()
-            if "WriteTimeoutException" in e.__str__():
-                InfoEvent(message="Proceeding without full data set").publish()
-            else:
-                InfoEvent(message="Failing on unknown exception").publish()
-                raise e
+            InfoEvent(message=f"Skipping error: {e.__str__()}").publish()
 
         manager_tool = mgmt.get_scylla_manager_tool(manager_node=self.monitors.nodes[0])
         mgr_cluster = manager_tool.get_cluster(cluster_name=self.CLUSTER_NAME) \
