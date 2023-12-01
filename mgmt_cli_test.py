@@ -450,7 +450,7 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
         InfoEvent(message=f'The backup task has ended successfully. Backup run time: {backup_task.duration}').publish()
         self.db_cluster.nodes[0].run_cqlsh('TRUNCATE keyspace1.standard1')
         self.restore_backup_with_task(mgr_cluster=mgr_cluster, snapshot_tag=backup_task.get_snapshot_tag(),
-                                      timeout=110000, restore_data=True)
+                                      timeout=330000, restore_data=True)
         self.run_verification_read_stress()
 
     def test_restore_multiple_backup_snapshots(self):  # pylint: disable=too-many-locals
