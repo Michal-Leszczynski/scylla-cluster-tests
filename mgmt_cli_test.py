@@ -416,22 +416,33 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
         repair_task.wait_and_get_final_status(step=30)
         InfoEvent(message="Repair ended").publish()
 
-    def _repair_intensity_feature(self, fault_multiple_nodes):
-        InfoEvent(message="Starting C-S write load").publish()
-        self.run_prepare_write_cmd()
-        InfoEvent(message="Flushing").publish()
-        for node in self.db_cluster.nodes:
-            node.run_nodetool("flush")
-        InfoEvent(message="Waiting for compactions to end").publish()
-        self.wait_no_compactions_running(n=30, sleep_time=30)
-        InfoEvent(message="Starting C-S read load").publish()
+    def _repair_intensity_feature(self, fault_multiple_nodes):     
+        InfoEvent(message="Create tablet table").publish()
+        tablets_keyspace = "keyspace_tablets"
+        tablets_config = '{\'enabled\': true, \'initial\': 8192}'
+        self.create_keyspace(tablets_keyspace, replication_factor=3, tablets_config=tablets_config)
+        
+        InfoEvent(message="Get manager").publish()
+        manager_tool = mgmt.get_scylla_manager_tool(manager_node=self.monitors.nodes[0])
+        mgr_cluster = manager_tool.add_cluster(
+            name=self.CLUSTER_NAME + '_intensity_and_parallel',
+            db_cluster=self.db_cluster,
+            auth_token=self.monitors.mgmt_auth_token,
+        )
+        
+        InfoEvent(message="Starting faulty load (to be repaired)").publish()
+        prevRowCnt = 29296872
+        self.create_missing_rows_in_cluster(create_missing_rows_in_multiple_nodes=fault_multiple_nodes,
+                                            keyspace_to_be_repaired=tablets_keyspace,
+                                            total_num_of_rows=3*prevRowCnt)
+        
+        InfoEvent(message="Start background reads").publish()
         stress_read_thread = self.generate_background_read_load()
-        time.sleep(600)  # So we will see the base load of the cluster
-        InfoEvent(message="Sleep ended - Starting tests").publish()
-        with self.subTest('test_intensity_and_parallel'):
-            self.test_intensity_and_parallel(fault_multiple_nodes=fault_multiple_nodes)
-        load_results = stress_read_thread.get_results()
-        self.log.info('load={}'.format(load_results))
+        
+        InfoEvent(message="Starting a repair with max intensity").publish()
+        base_repair_task = mgr_cluster.create_repair_task(keyspace=tablets_keyspace, intensity=0)
+        base_repair_task.wait_and_get_final_status(step=30)
+        assert base_repair_task.status == TaskStatus.DONE, "The base repair task did not end in the expected time"
 
     def get_email_data(self):
         self.log.info("Prepare data for email")
