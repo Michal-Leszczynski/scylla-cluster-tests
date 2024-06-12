@@ -212,18 +212,19 @@ class BackupFunctionsMixIn(LoaderUtilsMixin):
         stress_run_time = datetime.now() - stress_start_time
         InfoEvent(message=f'The read stress run was completed. Total run time: {stress_run_time}').publish()
 
-    def _generate_load(self, keyspace_name_to_replace=None):
+    def _generate_load(self, keyspace_name_to_replace=None, keyspace_name: str = None):
         self.log.info('Starting c-s write workload')
         stress_cmd = self.params.get('stress_cmd')
         if keyspace_name_to_replace:
             stress_cmd = stress_cmd.replace("keyspace1", keyspace_name_to_replace)
-        stress_thread = self.run_stress_thread(stress_cmd=stress_cmd)
+        stress_thread = self.run_stress_thread(stress_cmd=stress_cmd, keyspace_name=keyspace_name)
         self.log.info('Sleeping for 15s to let cassandra-stress run...')
         time.sleep(15)
         return stress_thread
 
-    def generate_load_and_wait_for_results(self, keyspace_name_to_replace=None):
-        load_thread = self._generate_load(keyspace_name_to_replace=keyspace_name_to_replace)
+    def generate_load_and_wait_for_results(self, keyspace_name_to_replace=None, keyspace_name: str = None):
+        load_thread = self._generate_load(keyspace_name_to_replace=keyspace_name_to_replace,
+                                          keyspace_name=keyspace_name)
         load_results = load_thread.get_results()
         self.log.info(f'load={load_results}')
 
@@ -352,6 +353,24 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
         with self.subTest('Client Encryption'):
             # Since this test activates encryption, it has to be the last test in the sanity
             self.test_client_encryption()
+
+    def test_vnodes_tablets(self):
+        """
+        Test steps:
+        1) Create a keyspace with vnodes.
+        2) Create a keyspace with tablets.
+        """
+        self.log.info('starting test_vnodes_tablets')
+
+        tablets_keyspace = "tablets_keyspace"
+        tablets_config = '{\'enabled\': true, \'initial\': 8192}'
+        self.create_keyspace(tablets_keyspace, replication_factor=3, tablets_config=tablets_config)
+        self.generate_load_and_wait_for_results(keyspace_name=tablets_keyspace)
+
+        vnodes_keyspace = "vnodes_keyspace"
+        tablets_config = '{\'enabled\': false}'
+        self.create_keyspace(vnodes_keyspace, replication_factor=3, tablets_config=tablets_config)
+        self.generate_load_and_wait_for_results(keyspace_name=vnodes_keyspace)
 
     def test_repair_intensity_feature_on_multiple_node(self):
         self._repair_intensity_feature(fault_multiple_nodes=True)
@@ -970,6 +989,8 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
             self.log.info("inserting {} rows to every node except {}".format(num_of_rows_per_insertion, node.name))
             end_of_range = start_of_range + num_of_rows_per_insertion - 1
             node.stop_scylla_server(verify_up=False, verify_down=True)
+            tablets_config = '{\'enabled\': true, \'initial\': 8192}'
+            self.create_keyspace(keyspace_name=keyspace_name, replication_factor=3, tablets_config=tablets_config)
             stress_thread = self.run_stress_thread(stress_cmd=stress_command_template.format(num_of_rows_per_insertion,
                                                                                              keyspace_name,
                                                                                              start_of_range,
