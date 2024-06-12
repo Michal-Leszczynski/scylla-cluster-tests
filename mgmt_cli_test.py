@@ -434,7 +434,7 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
         prevRowCnt = 29296872
         self.create_missing_rows_in_cluster(create_missing_rows_in_multiple_nodes=fault_multiple_nodes,
                                             keyspace_to_be_repaired=tablets_keyspace,
-                                            total_num_of_rows=3*prevRowCnt)
+                                            total_num_of_rows=20*prevRowCnt)
         
         InfoEvent(message="Start background reads").publish()
         stress_read_thread = self.generate_background_read_load()
