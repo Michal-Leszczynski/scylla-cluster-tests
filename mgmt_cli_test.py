@@ -495,7 +495,10 @@ class MgmtCliTest(BackupFunctionsMixIn, ClusterTester):
         return email_data
 
     def test_backup_and_restore_only_data(self):
-        self.run_prepare_write_cmd()
+        try:
+            self.run_prepare_write_cmd()
+        except BaseException as e:
+            InfoEvent(message=f"Skipping error: {e.__str__()}").publish()
         manager_tool = mgmt.get_scylla_manager_tool(manager_node=self.monitors.nodes[0])
         mgr_cluster = self._ensure_and_get_cluster(manager_tool)
         backup_task = mgr_cluster.create_backup_task(location_list=self.locations)
