@@ -1094,7 +1094,7 @@ class ScyllaManagerTool(ScyllaManagerBase):
 
         if alternator_credentials:
             access_key_id, secret_access_key = alternator_credentials
-            cmd += f" --alternator-access-key-id {access_key_id} --alternator-secret-access-key {secret_access_key}"
+            cmd += f" --alternator-access-key-id='{access_key_id}' --alternator-secret-access-key='{secret_access_key}'"
 
         res_cluster_add = self.sctool.run(cmd, parse_table_res=False)
         if not res_cluster_add or 'Cluster added' not in res_cluster_add.stderr:
