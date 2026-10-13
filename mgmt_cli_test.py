@@ -290,7 +290,10 @@ class ManagerBackupTests(ManagerRestoreTests):
         with ignore_no_space_errors(node=target_node):
             try:
                 backup_task = mgr_cluster.create_backup_task(location_list=self.locations, method=self.backup_method)
-                backup_task.wait_for_uploading_stage()
+                # The test needs the snapshot to be taken before the disk is filled, so that the resumed run reuses
+                # it. Any resumable stage gives that, while waiting for the upload itself races with native backup
+                # uploads, which finish within seconds on the regression dataset.
+                backup_task.wait_for_resumable_stage()
 
                 ctx = (
                     ignore_aborted_snapshot_upload_storage_io_errors()

@@ -5,7 +5,8 @@ import pytest
 from packaging.version import Version
 
 from sdcm.mgmt.common import ScyllaManagerError
-from sdcm.mgmt.cli import ManagerCluster, ManagerTask, SCTool, SCToolDocker, create_sctool
+from sdcm.wait import WaitForTimeoutError
+from sdcm.mgmt.cli import BackupTask, ManagerCluster, ManagerTask, SCTool, SCToolDocker, create_sctool
 
 
 def test_01_get_task_info_dict():
@@ -106,3 +107,45 @@ def test_docker_sctool_without_a_container_name_fails_loudly():
 
     with pytest.raises(ScyllaManagerError, match="manager_container_name"):
         create_sctool(manager_node=node)
+
+
+def _backup_task_with_progress_statuses(statuses):
+    """BackupTask whose consecutive `sctool progress` calls report the given `Status:` values."""
+    task = BackupTask.__new__(BackupTask)
+    task.id = "backup/2a4125d6-5d5a-45b9-9d8d-dec038b3732d"
+    outputs = [
+        mock.Mock(stdout=f"Run:\t\t{i}\nStatus:\t\t{status}\nSnapshot Tag:\tsm_x\n")
+        for i, status in enumerate(statuses)
+    ]
+    task.progress_string = mock.Mock(side_effect=outputs)
+    return task
+
+
+@pytest.mark.parametrize(
+    "statuses,expected_calls",
+    [
+        (["RUNNING (taking snapshot)", "RUNNING (indexing files)"], 2),
+        (["RUNNING (awaiting schema agreement)", "RUNNING (uploading data)"], 2),
+        (["RUNNING (retention)"], 1),
+    ],
+)
+def test_wait_for_resumable_stage_returns_on_first_resumable_stage(statuses, expected_calls):
+    task = _backup_task_with_progress_statuses(statuses)
+    with mock.patch("sdcm.mgmt.cli.time.sleep"):
+        assert task.wait_for_resumable_stage(timeout=60) is True
+    assert task.progress_string.call_count == expected_calls
+
+
+@pytest.mark.parametrize("final_status", ["DONE", "ERROR (4/4)"])
+def test_wait_for_stage_fails_fast_once_the_task_finished(final_status):
+    task = _backup_task_with_progress_statuses(["RUNNING (taking snapshot)", final_status])
+    with mock.patch("sdcm.mgmt.cli.time.sleep"), pytest.raises(ScyllaManagerError, match="finished with status"):
+        task.wait_for_uploading_stage(timeout=60)
+    assert task.progress_string.call_count == 2
+
+
+def test_wait_for_stage_does_not_treat_the_snapshot_stage_as_resumable():
+    task = _backup_task_with_progress_statuses(["RUNNING (taking snapshot)"] * 3)
+    with mock.patch("sdcm.mgmt.cli.time.sleep"), mock.patch("sdcm.mgmt.cli.time.time", side_effect=[0, 0, 5, 100]):
+        with pytest.raises(WaitForTimeoutError):
+            task.wait_for_resumable_stage(timeout=10)

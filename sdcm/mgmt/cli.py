@@ -474,18 +474,58 @@ class BackupTask(ManagerTask):
         LOGGER.debug("Snapshot tag: %s", snapshot_tag)
         return snapshot_tag
 
-    def is_task_in_uploading_stage(self):
-        full_progress_string = self.progress_string(
-            parse_table_res=False, is_verify_errorless_result=True
-        ).stdout.lower()
-        return "uploading data" in full_progress_string.lower()
+    # Stage names as printed by `sctool progress` (managerclient BackupStageName), in execution order.
+    # A run stopped in one of these stages is resumed with the same snapshot on the next start
+    # (backup Stage.Resumable() in Scylla Manager), while a stop before them starts a new run.
+    RESUMABLE_STAGES = (
+        "indexing files",
+        "uploading manifests",
+        "uploading schema",
+        "deduplicating the snapshot",
+        "uploading data",
+        "moving manifests",
+        "setting retention locks",
+        "migrating legacy metadata",
+        "retention",
+    )
 
-    def wait_for_uploading_stage(self, timeout=1440, step=10):
-        text = f"Waiting until backup task: {self.id} starts to upload snapshots"
-        is_status_reached = wait.wait_for(
-            func=self.is_task_in_uploading_stage, step=step, text=text, timeout=timeout, throw_exc=True
-        )
-        return is_status_reached
+    def progress_status(self) -> str:
+        """Returns the lower-cased `Status:` line of `sctool progress`, e.g. `running (uploading data)` or `done`."""
+        output = self.progress_string(parse_table_res=False, is_verify_errorless_result=True).stdout
+        for line in output.splitlines():
+            if line.lower().startswith("status:"):
+                return line.split(":", 1)[1].strip().lower()
+        return ""
+
+    def is_task_in_uploading_stage(self):
+        return "uploading data" in self.progress_status()
+
+    def _wait_for_stage(self, stages: tuple[str, ...], text: str, timeout: int, step: int) -> bool:
+        """Polls `sctool progress` until the run is in one of the given stages.
+
+        Fails right away once the run has finished (DONE or ERROR), as the awaited stage can't be reached anymore
+        and waiting for the full timeout only hides the actual problem (e.g. an upload that was too fast to catch).
+        """
+        deadline = time.time() + timeout
+        while True:
+            status = self.progress_status()
+            if any(stage in status for stage in stages):
+                return True
+            if status.startswith(("done", "error")):
+                raise ScyllaManagerError(f"{text}: the task finished with status '{status}' before reaching it")
+            if time.time() > deadline:
+                raise WaitForTimeoutError(f"{text}: timeout - {timeout} seconds - expired (last status: '{status}')")
+            LOGGER.debug("%s: current status '%s'", text, status)
+            time.sleep(step)
+
+    def wait_for_uploading_stage(self, timeout=1440, step=1):
+        text = f"Waiting until backup task {self.id} starts to upload snapshots"
+        return self._wait_for_stage(stages=("uploading data",), text=text, timeout=timeout, step=step)
+
+    def wait_for_resumable_stage(self, timeout=1440, step=1):
+        """Waits until the run took its snapshot and can be stopped and resumed with that snapshot."""
+        text = f"Waiting until backup task {self.id} reaches a resumable stage"
+        return self._wait_for_stage(stages=self.RESUMABLE_STAGES, text=text, timeout=timeout, step=step)
 
     def delete_backup_snapshot(self, snapshot_tag: str | None = None):
         if snapshot_tag is None:
